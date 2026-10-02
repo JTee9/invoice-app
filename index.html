@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>請求書メーカー</title>
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--ink:#1f2937;--mut:#6b7280;--line:#d1d5db;--acc:#1d4ed8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Yu Gothic","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;font-size:14px}
+.app{display:grid;grid-template-columns:420px 1fr;min-height:100vh}
+.panel{background:var(--card);border-right:1px solid var(--line);padding:16px;overflow-y:auto;max-height:100vh;position:sticky;top:0}
+.panel h2{font-size:16px;margin:0 0 10px}
+fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:10px 12px}
+legend{font-weight:700;padding:0 6px;font-size:13px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 2px}
+input,textarea,select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+textarea{resize:vertical;min-height:54px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row{display:grid;grid-template-columns:1fr 54px 80px 72px 28px;gap:4px;margin-bottom:6px}
+.row .x{border:0;background:none;color:#b91c1c;font-size:18px;cursor:pointer}
+.hdr{display:grid;grid-template-columns:1fr 54px 80px 72px 28px;gap:4px;font-size:11px;color:var(--mut)}
+button{font:inherit;cursor:pointer}
+.btn{padding:9px 12px;border:0;border-radius:6px;background:var(--acc);color:#fff;font-weight:700;flex:1}
+.btn.alt{background:#fff;color:var(--acc);border:1px solid var(--acc)}
+.btn.sm{padding:5px 10px;font-size:12px;flex:none;margin-top:4px}
+.bar{display:flex;gap:8px;margin-bottom:12px}
+.hint{font-size:11px;color:var(--mut);margin:6px 0 0}
+.stage{padding:24px;overflow:auto}
+.sheet{width:210mm;min-height:297mm;margin:0 auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15);padding:18mm 17mm;font-size:10.5pt;color:#000;line-height:1.55}
+.sheet h1{text-align:center;font-size:22pt;margin:0 0 6mm;letter-spacing:.3em}
+.sheet .meta{text-align:right;margin-bottom:6mm}
+.sheet .parties{display:flex;justify-content:space-between;gap:10mm;margin-bottom:6mm}
+.sheet .to{font-size:12pt}
+.sheet .from{min-width:80mm;font-size:9.5pt}
+.sheet .from b{font-size:11.5pt}
+.sheet .amt{font-size:13pt;border-bottom:2px solid #000;padding-bottom:2mm;margin:4mm 0 6mm}
+.sheet .amt b{font-size:16pt}
+.sheet table{border-collapse:collapse;width:100%}
+.sheet th,.sheet td{border:1px solid #999;padding:2mm 3mm}
+.sheet th{background:#eee;text-align:left}
+.sheet .r{text-align:right}.sheet .c{text-align:center}
+.sheet table.sum{width:95mm;margin:5mm 0 0 auto}
+.sheet h3{font-size:11.5pt;margin:8mm 0 1mm}
+@media(max-width:900px){.app{grid-template-columns:1fr}.panel{position:static;max-height:none}.stage{padding:8px}}
+@media print{
+ body{background:#fff}.app{display:block}.panel{display:none}
+ .stage{padding:0;overflow:visible}.sheet{box-shadow:none;margin:0;width:auto;min-height:0}
+ @page{size:A4;margin:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="panel">
+ <h2>請求書メーカー</h2>
+ <div class="bar">
+  <button class="btn" id="dl">Wordでダウンロード</button>
+  <button class="btn alt" id="pdf">PDFで保存</button>
+ </div>
+
+ <fieldset><legend>請求先</legend>
+  <label>会社名（「御中」が自動で付きます）</label><input id="cCo" placeholder="株式会社〇〇">
+  <label>担当者名（空欄なら省略／「様」が付きます）</label><input id="cPe" placeholder="山田 太郎">
+ </fieldset>
+
+ <fieldset><legend>日付</legend>
+  <div class="g2">
+   <div><label>請求日</label><input id="issue" type="date"></div>
+   <div><label>支払期限</label><input id="due" type="date"></div>
+  </div>
+  <label>請求日から何日後を期限にする？</label><input id="days" type="number" min="0" value="60">
+  <label>請求書番号（任意）</label><input id="invNo" placeholder="例：2026-001">
+ </fieldset>
+
+ <fieldset><legend>請求内容</legend>
+  <div class="hdr"><span>内容</span><span>数量</span><span>単価</span><span>区分</span><span></span></div>
+  <div id="rows"></div>
+  <button class="btn sm" id="add">＋ 行を追加</button>
+  <div class="g2">
+   <div><label>金額の入力方法</label><select id="mode"><option value="incl">税込で入力</option><option value="excl">税抜で入力</option></select></div>
+   <div><label>消費税率（%）</label><input id="rate" type="number" min="0" step="any" value="10"></div>
+  </div>
+  <label>源泉徴収</label><select id="wh"><option value="0">なし</option><option value="1">あり（10.21%）</option></select>
+  <p class="hint">対象は課税対象の報酬（税抜）のみで、消費税や、区分して請求した交通費などの実費は含めません。100万円を超える部分は20.42%で自動計算します。</p>
+  <p class="hint">交通費などの実費は「非課税」にすると消費税がかかりません。</p>
+ </fieldset>
+
+ <fieldset><legend>請求者（この端末のブラウザに保存されます）</legend>
+  <label>氏名／屋号</label><input id="sName" placeholder="山田 花子">
+  <label>住所</label><textarea id="sAddr" placeholder="東京都〇〇区〇〇1-2-3&#10;〇〇マンション101号室"></textarea>
+  <div class="g2">
+   <div><label>電話</label><input id="sTel" placeholder="090-0000-0000"></div>
+   <div><label>メール</label><input id="sMail" placeholder="you@example.com"></div>
+  </div>
+  <label>インボイス登録番号（任意）</label><input id="sReg" placeholder="T1234567890123">
+ </fieldset>
+
+ <fieldset><legend>振込先・備考</legend>
+  <label>振込先</label><textarea id="bank" placeholder="〇〇銀行　〇〇支店　普通口座　0000000&#10;口座名義：ヤマダ　ハナコ"></textarea>
+  <label>備考</label><textarea id="note">※振込手数料は貴社にてご負担くださいますようお願い申し上げます。</textarea>
+ </fieldset>
+ <p class="hint">入力内容はサーバーに送信されません。請求者情報・振込先・備考のみ、このブラウザのlocalStorageに保存されます。</p>
+</aside>
+<main class="stage"><div class="sheet" id="sheet"></div></main>
+</div>
+
+<script src="vendor/docx.iife.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nl=s=>esc(s).replace(/\n/g,'<br>');
+const num=n=>Number(n).toLocaleString('ja-JP');
+const yen=n=>(n<0?'−':'')+num(Math.abs(n))+'円';
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parts=s=>s.split('-').map(Number);
+const jd=s=>{if(!s)return '';const [y,m,d]=parts(s);return `${y}年${m}月${d}日`};
+const addDays=(s,n)=>{const [y,m,d]=parts(s);return iso(new Date(y,m-1,d+n))};
+
+let items=[
+ {d:'',q:1,p:0,t:1}
+];
+const KEEP=['sName','sAddr','sTel','sMail','sReg','bank','note','mode','rate','days','wh'];
+
+function drawRows(){
+ $('rows').innerHTML=items.map((it,i)=>`<div class="row" data-i="${i}">
+ <input class="d" value="${esc(it.d)}" placeholder="内容">
+ <input class="q" type="number" min="0" step="any" value="${it.q}">
+ <input class="p" type="number" step="any" value="${it.p}">
+ <select class="t"><option value="1"${it.t?' selected':''}>課税</option><option value="0"${it.t?'':' selected'}>非課税</option></select>
+ <button class="x" title="この行を削除">×</button></div>`).join('');
+}
+
+function get(){
+ const v=id=>$(id).value;
+ const rate=+v('rate')||0, incl=v('mode')==='incl';
+ let base=0,non=0;
+ items.forEach(i=>{i.a=Math.round(i.q*i.p);i.t?base+=i.a:non+=i.a});
+ const tax=incl?Math.floor(base*rate/(100+rate)):Math.floor(base*rate/100);
+ const sub=incl?base-tax:base;
+ const whOn=v('wh')==='1';
+ const wh=whOn?Math.floor(sub<=1000000?sub*0.1021:1000000*0.1021+(sub-1000000)*0.2042):0;
+ const total=sub+tax+non;
+ return {whOn,wh,net:total-wh,no:v('invNo'),issue:v('issue'),due:v('due'),co:v('cCo'),pe:v('cPe'),sN:v('sName'),sA:v('sAddr'),
+  sT:v('sTel'),sM:v('sMail'),sR:v('sReg'),bank:v('bank'),note:v('note'),items,rate,incl,sub,tax,non,total};
+}
+const label=i=>i.d+(i.t?'':'　※消費税対象外');
+const sumRows=D=>[['小計（課税対象・税抜）',D.sub],[`消費税（${D.rate}%）`,D.tax]].concat(D.non?[['非課税（実費など）',D.non]]:[]).concat([['合計',D.total]]).concat(D.whOn?[['源泉徴収税額（10.21%）',-D.wh],['ご請求額（差引）',D.net]]:[]);
+
+function render(){
+ const D=get();
+ $('sheet').innerHTML=`<h1>請求書</h1>
+ <div class="meta">${D.no?`請求書番号：${esc(D.no)}<br>`:''}請求日：${jd(D.issue)}<br>支払期限：${jd(D.due)}</div>
+ <div class="parties">
+  <div class="to"><b>${esc(D.co)}　御中</b>${D.pe?`<div>${esc(D.pe)}　様</div>`:''}</div>
+  <div class="from"><b>${esc(D.sN)}</b><div>${nl(D.sA)}</div>${D.sT?`<div>電話：${esc(D.sT)}</div>`:''}${D.sM?`<div>メール：${esc(D.sM)}</div>`:''}${D.sR?`<div>登録番号：${esc(D.sR)}</div>`:''}</div>
+ </div>
+ <p>下記のとおりご請求申し上げます。</p>
+ <div class="amt">ご請求金額：<b>${yen(D.net)}</b>（${D.whOn?'源泉徴収税額控除後':'税込'}）</div>
+ <table><tr><th>内容</th><th class="c">数量</th><th class="r">単価</th><th class="r">金額</th></tr>
+ ${D.items.map(i=>`<tr><td>${esc(label(i))}</td><td class="c">${i.q}</td><td class="r">${yen(i.p)}</td><td class="r">${yen(i.a)}</td></tr>`).join('')}</table>
+ <table class="sum">${sumRows(D).map((r,k,a)=>`<tr><td${k==a.length-1?' style="font-weight:700"':''}>${r[0]}</td><td class="r"${k==a.length-1?' style="font-weight:700"':''}>${yen(r[1])}</td></tr>`).join('')}</table>
+ ${D.bank?`<h3>お振込先</h3><div>${nl(D.bank)}</div>`:''}
+ ${D.note?`<div style="margin-top:3mm">${nl(D.note)}</div>`:''}`;
+}
+
+const fname=D=>`請求書_${D.co.replace(/[\\/:*?"<>|\s]/g,'')}_${D.issue}`;
+
+function buildDoc(D){
+ const {Document,Paragraph,TextRun,Table,TableRow,TableCell,WidthType,AlignmentType,BorderStyle,ShadingType}=docx;
+ const F={ascii:'Arial',hAnsi:'Arial',eastAsia:'Yu Gothic'};
+ const t=(s,o={})=>new TextRun({text:s,font:F,size:21,...o});
+ const p=(r,o={})=>new Paragraph({children:Array.isArray(r)?r:[r],...o});
+ const lines=(s,o)=>String(s).split('\n').map(l=>p(t(l,o)));
+ const R=AlignmentType.RIGHT,C=AlignmentType.CENTER;
+ const bd={style:BorderStyle.SINGLE,size:4,color:'999999'},borders={top:bd,bottom:bd,left:bd,right:bd};
+ const nb={style:BorderStyle.NONE,size:0,color:'FFFFFF'},nob={top:nb,bottom:nb,left:nb,right:nb};
+ const cell=(s,w,o={})=>new TableCell({width:{size:w,type:WidthType.DXA},borders,margins:{top:100,bottom:100,left:120,right:120},
+  shading:o.head?{fill:'EEEEEE',type:ShadingType.CLEAR,color:'auto'}:undefined,
+  children:[p(t(s,{bold:!!(o.head||o.bold)}),{alignment:o.align})]});
+ const nc=(w,kids)=>new TableCell({width:{size:w,type:WidthType.DXA},borders:nob,margins:{top:0,bottom:0,left:0,right:0},children:kids});
+ const W=[5880,800,1400,1426];
+ const itemsT=new Table({width:{size:9506,type:WidthType.DXA},columnWidths:W,rows:[
+  new TableRow({children:[cell('内容',W[0],{head:1}),cell('数量',W[1],{head:1,align:C}),cell('単価',W[2],{head:1,align:R}),cell('金額',W[3],{head:1,align:R})]}),
+  ...D.items.map(i=>new TableRow({children:[cell(label(i),W[0]),cell(String(i.q),W[1],{align:C}),cell(yen(i.p),W[2],{align:R}),cell(yen(i.a),W[3],{align:R})]}))]});
+ const rows=sumRows(D);
+ const sumT=new Table({width:{size:5000,type:WidthType.DXA},columnWidths:[3200,1800],alignment:R,
+  rows:rows.map((r,k)=>new TableRow({children:[cell(r[0],3200,{bold:k==rows.length-1}),cell(yen(r[1]),1800,{align:R,bold:k==rows.length-1})]}))});
+ const sender=[p(t(D.sN,{bold:true,size:24})),...lines(D.sA)];
+ if(D.sT)sender.push(p(t('電話：'+D.sT)));
+ if(D.sM)sender.push(p(t('メール：'+D.sM)));
+ if(D.sR)sender.push(p(t('登録番号：'+D.sR)));
+ const to=[p(t(D.co+'　御中',{size:26,bold:true}))];
+ if(D.pe)to.push(p(t(D.pe+'　様',{size:24})));
+ const partiesT=new Table({width:{size:9506,type:WidthType.DXA},columnWidths:[4900,4606],rows:[new TableRow({children:[nc(4900,to),nc(4606,sender)]})]});
+ const meta=[];
+ if(D.no)meta.push(p(t('請求書番号：'+D.no),{alignment:R}));
+ meta.push(p(t('請求日：'+jd(D.issue)),{alignment:R}),p(t('支払期限：'+jd(D.due)),{alignment:R,spacing:{after:300}}));
+ const body=[
+  p(t('請求書',{size:44,bold:true}),{alignment:C,spacing:{after:300}}),...meta,partiesT,
+  p(t(''),{spacing:{after:100}}),
+  p(t('下記のとおりご請求申し上げます。'),{spacing:{after:200}}),
+  p([t('ご請求金額：',{size:26,bold:true}),t(yen(D.net)+'（'+(D.whOn?'源泉徴収税額控除後':'税込')+'）',{size:32,bold:true})],{border:{bottom:{style:BorderStyle.SINGLE,size:8,color:'000000',space:4}},spacing:{after:300}}),
+  itemsT,p(t(''),{spacing:{after:120}}),sumT];
+ if(D.bank){body.push(p(t('お振込先',{bold:true,size:23}),{spacing:{before:400,after:100}}),...lines(D.bank))}
+ if(D.note){body.push(p(t(''),{spacing:{after:100}}),...lines(D.note))}
+ return new Document({sections:[{properties:{page:{margin:{top:1200,bottom:1200,left:1200,right:1200}}},children:body}]});
+}
+
+// ---- events ----
+$('rows').addEventListener('input',e=>{
+ const r=e.target.closest('.row');if(!r)return;const it=items[r.dataset.i];
+ it.d=r.querySelector('.d').value;it.q=+r.querySelector('.q').value||0;it.p=+r.querySelector('.p').value||0;it.t=+r.querySelector('.t').value;render();
+});
+$('rows').addEventListener('click',e=>{
+ if(e.target.classList.contains('x')){items.splice(e.target.closest('.row').dataset.i,1);drawRows();render()}
+});
+$('add').onclick=()=>{items.push({d:'',q:1,p:0,t:1});drawRows();render()};
+const recalcDue=()=>{if($('issue').value)$('due').value=addDays($('issue').value,+$('days').value||0)};
+$('issue').addEventListener('input',()=>{recalcDue();render()});
+$('days').addEventListener('input',()=>{recalcDue();render()});
+document.querySelector('.panel').addEventListener('input',e=>{
+ if(e.target.closest('#rows'))return;
+ render();
+ try{const o={};KEEP.forEach(k=>o[k]=$(k).value);localStorage.setItem('invoiceProfile',JSON.stringify(o))}catch(_){}
+});
+$('dl').onclick=async()=>{
+ const D=get(),b=await docx.Packer.toBlob(buildDoc(D)),a=document.createElement('a');
+ a.href=URL.createObjectURL(b);a.download=fname(D)+'.docx';document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+$('pdf').onclick=()=>{const t=document.title;document.title=fname(get());window.print();document.title=t};
+
+// ---- init ----
+try{const o=JSON.parse(localStorage.getItem('invoiceProfile')||'{}');KEEP.forEach(k=>{if(o[k]!=null)$(k).value=o[k]})}catch(_){}
+$('issue').value=iso(new Date());recalcDue();
+drawRows();render();
+</script>
+</body>
+</html>
